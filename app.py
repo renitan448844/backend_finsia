@@ -44,13 +44,13 @@ except Exception as e:
     exit(1)
 
 # ============================================
-# LABEL MAPPING
+# LABEL MAPPING (TELAH DIPERBAIKI SESUAI CENTROID AKTUAL)
 # ============================================
 
 label_mapping = {
-    0: 'Hemat',
-    1: 'Normal/Stabil',
-    2: 'Konsumtif/Boros'
+    0: 'Konsumtif/Boros',  # Centroid pengeluaran positif (+0.61)
+    1: 'Normal/Stabil',    # Centroid pengeluaran moderat (+0.14)
+    2: 'Hemat'             # Centroid pengeluaran sangat negatif (-1.36)
 }
 
 print(f"\n📊 Label Mapping: {label_mapping}")
@@ -68,7 +68,7 @@ INSIGHTS = {
     'Normal/Stabil': {
         'emoji': '😊',
         'insight': 'Pengeluaran Anda tergolong STABIL! Cukup baik.',
-        'recommendation': 'Pertahankan keseimbangan ini. Coba alokasikan 10% untuk tabungan.'
+        'recommendation': 'Pertahankan keseimbangan ini. Coba alokasikan uangmu untuk menabung.'
     },
     'Konsumtif/Boros': {
         'emoji': '⚠️',
@@ -152,7 +152,7 @@ def home():
         'endpoints': {
             '/': 'GET - Home',
             '/health': 'GET - Cek status server',
-            '/predict': 'POST - Prediksi cluster',
+            '/predict': 'GET/POST - Prediksi cluster',
             '/info': 'GET - Info model'
         }
     })
@@ -181,24 +181,32 @@ def info():
         }
     })
 
-@app.route('/predict', methods=['POST'])
+@app.route('/predict', methods=['GET', 'POST']) # Mendukung GET untuk tes langsung di Browser Tab
 def predict():
     """Endpoint untuk prediksi cluster"""
-    
     try:
-        # Ambil data dari request
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                'status': 'error',
-                'message': 'Request body tidak ditemukan'
-            }), 400
+        if request.method == 'GET':
+            # Mengambil parameter input dari alamat URL (Query String)
+            data = {
+                'total_pengeluaran': request.args.get('total_pengeluaran', default=0.0, type=float),
+                'jumlah_transaksi': request.args.get('jumlah_transaksi', default=0.0, type=float),
+                'persen_kebutuhan': request.args.get('persen_kebutuhan', default=0.0, type=float),
+                'persen_hiburan': request.args.get('persen_hiburan', default=0.0, type=float),
+                'persen_belanja': request.args.get('persen_belanja', default=0.0, type=float)
+            }
+        else:
+            # Mengambil parameter input dari Flutter / JSON Body (POST)
+            data = request.get_json()
+            if not data:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Request body tidak ditemukan'
+                }), 400
         
         # Prediksi
         result = predict_cluster(data)
         
-        # Return response
+        # Kembalikan respon
         return jsonify({
             'status': 'success',
             'data': result
@@ -239,14 +247,21 @@ def internal_error(error):
 # ============================================
 
 if __name__ == '__main__':
+    # Ambil port dari environment (Render/Hostinger)
+    port = int(os.environ.get("PORT", 5000))
+
     print("\n" + "=" * 60)
     print("🚀 STARTING FLASK SERVER")
     print("=" * 60)
-    print(f"📍 Server running at: http://localhost:5000")
-    print(f"📊 Health check: http://localhost:5000/health")
-    print(f"🔮 Predict endpoint: http://localhost:5000/predict")
-    print(f"ℹ️  Info model: http://localhost:5000/info")
+    print(f"📍 Server running on port: {port}")
+    print(f"📊 Health check: /health")
+    print(f"🔮 Predict endpoint: /predict")
+    print(f"ℹ️  Info model: /info")
     print("=" * 60)
     print("\n📌 KETIK Ctrl+C UNTUK STOP SERVER\n")
-    
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False
+    )
