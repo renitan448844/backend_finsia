@@ -20,9 +20,10 @@ CORS(app)  # Izinkan akses dari Flutter
 # LOAD MODEL
 # ============================================
 
-# Path ke model
-MODEL_PATH = 'models/kmeans_model.pkl'
-SCALER_PATH = 'models/scaler_model.pkl'
+# Path ke model (Gunakan absolute path agar Vercel Serverless bisa menemukan file .pkl)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, 'models', 'kmeans_model.pkl')
+SCALER_PATH = os.path.join(BASE_DIR, 'models', 'scaler_model.pkl')
 
 # Load model
 print("\n" + "=" * 60)
@@ -35,22 +36,22 @@ try:
     print("✅ Model berhasil di-load!")
     print(f"   K-Means: {kmeans}")
     print(f"   Scaler: {scaler}")
-except FileNotFoundError as e:
-    print(f"❌ File tidak ditemukan: {e}")
-    print("   Pastikan file .pkl ada di folder models/")
-    exit(1)
 except Exception as e:
     print(f"❌ Error loading model: {e}")
-    exit(1)
+    kmeans = None
+    scaler = None
 
-# ============================================
-# LABEL MAPPING (TELAH DIPERBAIKI SESUAI CENTROID AKTUAL)
-# ============================================
+
+cluster_remap = {
+    2: 0,   # Hemat
+    1: 1,   # Stabil
+    0: 2    # Konsumtif
+}
 
 label_mapping = {
-    0: 'Konsumtif/Boros',  # Centroid pengeluaran positif (+0.61)
-    1: 'Normal/Stabil',    # Centroid pengeluaran moderat (+0.14)
-    2: 'Hemat'             # Centroid pengeluaran sangat negatif (-1.36)
+    0: 'Hemat',
+    1: 'Stabil',
+    2: 'Konsumtif'
 }
 
 print(f"\n📊 Label Mapping: {label_mapping}")
@@ -84,6 +85,9 @@ INSIGHTS = {
 def predict_cluster(data):
     """Prediksi cluster dari data transaksi bulanan"""
     
+    if kmeans is None or scaler is None:
+        raise ValueError("Model Machine Learning belum berhasil di-load di server.")
+
     # Validasi input
     required = ['total_pengeluaran', 'jumlah_transaksi', 
                 'persen_kebutuhan', 'persen_hiburan', 'persen_belanja']
@@ -172,11 +176,17 @@ def health():
 @app.route('/info', methods=['GET'])
 def info():
     """Info model endpoint"""
+    if kmeans is None:
+        return jsonify({
+            'status': 'error',
+            'message': 'Model Machine Learning belum berhasil di-load'
+        }), 500
+
     return jsonify({
         'status': 'success',
         'data': {
             'n_clusters': kmeans.n_clusters,
-            'n_features': kmeans.n_features_in_,
+            'n_features': getattr(kmeans, 'n_features_in_', None),
             'labels': label_mapping
         }
     })
